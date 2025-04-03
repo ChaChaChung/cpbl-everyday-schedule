@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -22,6 +25,11 @@ type GameSchedule struct {
 	HomeScore string `json:"home_score"`
 	HomeSP    string `json:"home_sp"`
 }
+
+var (
+	schedules []GameSchedule
+	mu        sync.Mutex // 互斥鎖，確保數據更新時不會產生競爭
+)
 
 // FetchSchedule fetches the schedule from CPBL website based on the year, month, and game type
 func FetchSchedule() ([]GameSchedule, error) {
@@ -114,19 +122,41 @@ func FetchSchedule() ([]GameSchedule, error) {
 	return schedules, nil
 }
 
+func getScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(schedules)
+}
+
+// func main() {
+// 	schedules, err := FetchSchedule()
+// 	if err != nil {
+// 		fmt.Println("Error:", err)
+// 		return
+// 	}
+
+// 	// 格式化 JSON 輸出
+// 	jsonData, err := json.MarshalIndent(schedules, "", "    ")
+// 	if err != nil {
+// 		fmt.Println("Error formatting JSON:", err)
+// 		return
+// 	}
+
+// 	fmt.Println(string(jsonData))
+// }
+
 func main() {
-	schedules, err := FetchSchedule()
+	// 啟動時先抓取一次
+	var err error
+	schedules, err = FetchSchedule()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		log.Println("Initial fetch failed:", err)
 	}
 
-	// 格式化 JSON 輸出
-	jsonData, err := json.MarshalIndent(schedules, "", "    ")
-	if err != nil {
-		fmt.Println("Error formatting JSON:", err)
-		return
-	}
-
-	fmt.Println(string(jsonData))
+	// 啟動 API 伺服器
+	http.HandleFunc("/schedule", getScheduleHandler)
+	fmt.Println("Server running on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
