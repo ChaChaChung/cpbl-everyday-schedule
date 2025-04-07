@@ -12,38 +12,106 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-type GameSchedule struct {
-	Date      string `json:"date"`
-	Day       string `json:"day"`
-	Time      string `json:"time"`
-	Location  string `json:"location"`
-	GameNo    string `json:"game_no"`
-	AwayTeam  string `json:"away_team"`
-	AwaySP    string `json:"away_sp"`
-	AwayScore string `json:"away_score"`
-	HomeTeam  string `json:"home_team"`
-	HomeScore string `json:"home_score"`
-	HomeSP    string `json:"home_sp"`
+type RawGameSchedule struct {
+	Date        string `json:"date"`
+	Day         string `json:"day"`
+	Time        string `json:"time"`
+	Location    string `json:"location"`
+	GameNo      string `json:"game_no"`
+	AwayTeamURL string `json:"away_team_url"`
+	AwaySP      string `json:"away_sp"`
+	AwayScore   string `json:"away_score"`
+	HomeTeamURL string `json:"home_team_url"`
+	HomeSP      string `json:"home_sp"`
+	HomeScore   string `json:"home_score"`
 }
 
-type GameBox struct {
+type GameSchedule struct {
+	Date           string `json:"date"`
+	Day            string `json:"day"`
+	Time           string `json:"time"`
+	Location       string `json:"location"`
+	GameNo         string `json:"game_no"`
+	AwayTeam       string `json:"away_team"`
+	AwayTeamAbbr   string `json:"away_team_abbr"`
+	AwayTeamSingle string `json:"away_team_single"`
+	AwaySP         string `json:"away_sp"`
+	AwayScore      string `json:"away_score"`
+	HomeTeam       string `json:"home_team"`
+	HomeTeamAbbr   string `json:"home_team_abbr"`
+	HomeTeamSingle string `json:"home_team_single"`
+	HomeScore      string `json:"home_score"`
+	HomeSP         string `json:"home_sp"`
+}
+
+type RawGameBox struct {
 	Date         string `json:"date"`
 	Day          string `json:"day"`
 	Location     string `json:"location"`
 	GameNo       string `json:"game_no"`
-	AwayTeam     string `json:"away_team"`
+	AwayTeamURL  string `json:"away_team_url"`
 	AwayScore    string `json:"away_score"`
-	HomeTeam     string `json:"home_team"`
+	HomeTeamURL  string `json:"home_team_url"`
 	HomeScore    string `json:"home_score"`
 	WinsPitcher  string `json:"wins_pitcher"`
 	LosesPitcher string `json:"loses_pitcher"`
 	SavesPitcher string `json:"saves_pitcher"`
 }
 
+type GameBox struct {
+	Date           string `json:"date"`
+	Day            string `json:"day"`
+	Location       string `json:"location"`
+	GameNo         string `json:"game_no"`
+	AwayTeam       string `json:"away_team"`
+	AwayTeamAbbr   string `json:"away_team_abbr"`
+	AwayTeamSingle string `json:"away_team_single"`
+	AwayScore      string `json:"away_score"`
+	HomeTeam       string `json:"home_team"`
+	HomeTeamAbbr   string `json:"home_team_abbr"`
+	HomeTeamSingle string `json:"home_team_single"`
+	HomeScore      string `json:"home_score"`
+	WinsPitcher    string `json:"wins_pitcher"`
+	LosesPitcher   string `json:"loses_pitcher"`
+	SavesPitcher   string `json:"saves_pitcher"`
+}
+
+type Team struct {
+	FullName string
+	AbbrName string
+	OneName  string
+}
+
 var (
 	schedules []GameSchedule
 	mu        sync.Mutex // 互斥鎖，確保數據更新時不會產生競爭
 )
+
+func getTeamName(teamURL string) Team {
+	var team Team
+	switch teamURL {
+	case "/team/index?teamNo=ACN011":
+		team = Team{FullName: "中信兄弟", AbbrName: "中信", OneName: "象"}
+		return team
+	case "/team/index?teamNo=AEO011":
+		team = Team{FullName: "富邦悍將", AbbrName: "富邦", OneName: "悍"}
+		return team
+	case "/team/index?teamNo=AJL011":
+		team = Team{FullName: "樂天桃猿", AbbrName: "樂天", OneName: "猿"}
+		return team
+	case "/team/index?teamNo=ADD011":
+		team = Team{FullName: "統一獅", AbbrName: "統一", OneName: "獅"}
+		return team
+	case "/team/index?teamNo=AKP011":
+		team = Team{FullName: "台鋼雄鷹", AbbrName: "台鋼", OneName: "鷹"}
+		return team
+	case "/team/index?teamNo=AAA011":
+		team = Team{FullName: "味全龍", AbbrName: "味全", OneName: "龍"}
+		return team
+	default:
+		return Team{FullName: "未知", AbbrName: "未知", OneName: "未知"}
+	}
+}
 
 func FetchSchedule() ([]GameSchedule, error) {
 	// 建立一個新的 chromedp 瀏覽器上下文
@@ -67,30 +135,6 @@ func FetchSchedule() ([]GameSchedule, error) {
 		chromedp.Evaluate(`
             (() => {
                     let schedules = [];
-                    function getTeamName (team_url) {
-                        switch(team_url) {
-                            case '/team/index?teamNo=ACN011':
-                                return '中信兄弟'
-                                break
-                            case '/team/index?teamNo=AEO011':
-                                return '富邦悍將'
-                                break
-                            case '/team/index?teamNo=AJL011':
-                                return '樂天桃猿'
-                                break
-                            case '/team/index?teamNo=ADD011':
-                                return '統一獅'
-                                break
-                            case '/team/index?teamNo=AKP011':
-                                return '台鋼雄鷹'
-                                break
-                            case '/team/index?teamNo=AAA011':
-                                return '味全龍'
-                                break
-                            default:
-                                break;
-                        }
-                    }
                     const a = document.querySelectorAll('.major');
                     a.forEach((dateDiv) => {
                             const b = dateDiv.querySelectorAll('.game_item')
@@ -101,9 +145,7 @@ func FetchSchedule() ([]GameSchedule, error) {
                                     const location = gameDiv.querySelector('.place').innerText.trim()
                                     const game_no = gameDiv.querySelector('.game_no a').innerText.trim()
                                     let away_team = gameDiv.querySelector('.away .team_name a').getAttribute('href').trim()
-                                    away_team = getTeamName(away_team)
                                     let home_team = gameDiv.querySelector('.home .team_name a').getAttribute('href').trim()
-                                    home_team = getTeamName(home_team)
                                     const away_score = gameDiv.querySelector('.score_wrap .away')?.innerText.trim() || "0"
                                     const home_score = gameDiv.querySelector('.score_wrap .home')?.innerText.trim() || "0"
                                     const away_sp = gameDiv.querySelector('.away_sp .name a')?.innerText.trim()
@@ -114,10 +156,10 @@ func FetchSchedule() ([]GameSchedule, error) {
                                         'time': time,
                                         'location': location,
                                         'game_no': game_no,
-                                        'away_team': away_team,
+                                        'away_team_url': away_team,
                                         'away_sp': away_sp,
                                         'away_score': away_score,
-                                        'home_team': home_team,
+                                        'home_team_url': home_team,
                                         'home_score': home_score,
                                         'home_sp': home_sp
                                     });
@@ -135,16 +177,34 @@ func FetchSchedule() ([]GameSchedule, error) {
 	}
 
 	// 宣告一個 GameSchedule 結構的 slice，然後把剛剛從前端抓下來的 JSON 字串解析成 Go 的結構
-	var schedules []GameSchedule
-	err = json.Unmarshal([]byte(jsonStr), &schedules)
-
-	// 解析過程有錯誤也要返回
-	if err != nil {
+	var schedules []RawGameSchedule
+	if err := json.Unmarshal([]byte(jsonStr), &schedules); err != nil {
 		return nil, err
 	}
 
+	var final []GameSchedule
+	for _, item := range schedules {
+		final = append(final, GameSchedule{
+			Date:           item.Date,
+			Day:            item.Day,
+			Time:           item.Time,
+			Location:       item.Location,
+			GameNo:         item.GameNo,
+			AwayTeam:       getTeamName(item.AwayTeamURL).FullName,
+			AwayTeamAbbr:   getTeamName(item.AwayTeamURL).AbbrName,
+			AwayTeamSingle: getTeamName(item.AwayTeamURL).OneName,
+			AwayScore:      item.AwayScore,
+			AwaySP:         item.AwaySP,
+			HomeTeam:       getTeamName(item.HomeTeamURL).FullName,
+			HomeTeamAbbr:   getTeamName(item.HomeTeamURL).AbbrName,
+			HomeTeamSingle: getTeamName(item.HomeTeamURL).OneName,
+			HomeScore:      item.HomeScore,
+			HomeSP:         item.HomeSP,
+		})
+	}
+
 	// 最後回傳整理好的比賽資料與 nil（代表沒有錯誤）
-	return schedules, nil
+	return final, nil
 }
 
 // 定義一個名為 getScheduleHandler 的函式，w 是用來寫入 HTTP 回應的物件，r 是用來讀取請求資料的物件
@@ -173,17 +233,6 @@ func FetchYesterdaySchedule() ([]GameBox, error) {
 		chromedp.Sleep(2*time.Second),                   // 給 JS 時間載入內容
 		chromedp.Evaluate(`( () => {
 			let schedules = [];
-			function getTeamName (team_url) {
-				switch(team_url) {
-					case '/team/index?teamNo=ACN011': return '中信兄弟';
-					case '/team/index?teamNo=AEO011': return '富邦悍將';
-					case '/team/index?teamNo=AJL011': return '樂天桃猿';
-					case '/team/index?teamNo=ADD011': return '統一獅';
-					case '/team/index?teamNo=AKP011': return '台鋼雄鷹';
-					case '/team/index?teamNo=AAA011': return '味全龍';
-					default: return '';
-				}
-			}
 			const a = document.querySelectorAll('.major');
 			a.forEach((dateDiv) => {
 				const b = dateDiv.querySelectorAll('.game_item')
@@ -194,9 +243,7 @@ func FetchYesterdaySchedule() ([]GameBox, error) {
 					const location = gameDiv.querySelector('.place').innerText.trim()
 					const game_no = gameDiv.querySelector('.game_no a').innerText.trim()
 					let away_team = gameDiv.querySelector('.away .team_name a').getAttribute('href').trim()
-					away_team = getTeamName(away_team)
 					let home_team = gameDiv.querySelector('.home .team_name a').getAttribute('href').trim()
-					home_team = getTeamName(home_team)
 					const away_score = gameDiv.querySelector('.score_wrap .away')?.innerText.trim() || "0"
 					const home_score = gameDiv.querySelector('.score_wrap .home')?.innerText.trim() || "0"
 					const wins_pitcher = gameDiv.querySelector('.wins .name a')?.innerText.trim()
@@ -208,9 +255,9 @@ func FetchYesterdaySchedule() ([]GameBox, error) {
 						'time': time,
 						'location': location,
 						'game_no': game_no,
-						'away_team': away_team,
+						'away_team_url': away_team,
 						'away_score': away_score,
-						'home_team': home_team,
+						'home_team_url': home_team,
 						'home_score': home_score,
 						'wins_pitcher': wins_pitcher,
 						'loses_pitcher': loses_pitcher,
@@ -226,12 +273,33 @@ func FetchYesterdaySchedule() ([]GameBox, error) {
 		return nil, err
 	}
 
-	var schedulesYesterday []GameBox
+	var schedulesYesterday []RawGameBox
 	if err := json.Unmarshal([]byte(jsonStr), &schedulesYesterday); err != nil {
 		return nil, err
 	}
 
-	return schedulesYesterday, nil
+	var final []GameBox
+	for _, item := range schedulesYesterday {
+		final = append(final, GameBox{
+			Date:           item.Date,
+			Day:            item.Day,
+			Location:       item.Location,
+			GameNo:         item.GameNo,
+			AwayTeam:       getTeamName(item.AwayTeamURL).FullName,
+			AwayTeamAbbr:   getTeamName(item.AwayTeamURL).AbbrName,
+			AwayTeamSingle: getTeamName(item.AwayTeamURL).OneName,
+			AwayScore:      item.AwayScore,
+			HomeTeam:       getTeamName(item.HomeTeamURL).FullName,
+			HomeTeamAbbr:   getTeamName(item.HomeTeamURL).AbbrName,
+			HomeTeamSingle: getTeamName(item.HomeTeamURL).OneName,
+			HomeScore:      item.HomeScore,
+			WinsPitcher:    item.WinsPitcher,
+			LosesPitcher:   item.LosesPitcher,
+			SavesPitcher:   item.SavesPitcher,
+		})
+	}
+
+	return final, nil
 }
 
 // 定義一個名為 getYesterdayScheduleHandler 的函式，w 是用來寫入 HTTP 回應的物件，r 是用來讀取請求資料的物件
@@ -262,17 +330,6 @@ func FetchTomorrowSchedule() ([]GameSchedule, error) {
 		chromedp.Sleep(2*time.Second),                   // 給 JS 時間載入內容
 		chromedp.Evaluate(`( () => {
 			let schedules = [];
-			function getTeamName (team_url) {
-				switch(team_url) {
-					case '/team/index?teamNo=ACN011': return '中信兄弟';
-					case '/team/index?teamNo=AEO011': return '富邦悍將';
-					case '/team/index?teamNo=AJL011': return '樂天桃猿';
-					case '/team/index?teamNo=ADD011': return '統一獅';
-					case '/team/index?teamNo=AKP011': return '台鋼雄鷹';
-					case '/team/index?teamNo=AAA011': return '味全龍';
-					default: return '';
-				}
-			}
 			const a = document.querySelectorAll('.major');
 			a.forEach((dateDiv) => {
 				const b = dateDiv.querySelectorAll('.game_item')
@@ -283,9 +340,7 @@ func FetchTomorrowSchedule() ([]GameSchedule, error) {
 					const location = gameDiv.querySelector('.place').innerText.trim()
 					const game_no = gameDiv.querySelector('.game_no a').innerText.trim()
 					let away_team = gameDiv.querySelector('.away .team_name a').getAttribute('href').trim()
-					away_team = getTeamName(away_team)
 					let home_team = gameDiv.querySelector('.home .team_name a').getAttribute('href').trim()
-					home_team = getTeamName(home_team)
 					const away_score = gameDiv.querySelector('.score_wrap .away')?.innerText.trim() || "0"
 					const home_score = gameDiv.querySelector('.score_wrap .home')?.innerText.trim() || "0"
                     const away_sp = gameDiv.querySelector('.away_sp .name a')?.innerText.trim()
@@ -296,9 +351,9 @@ func FetchTomorrowSchedule() ([]GameSchedule, error) {
 						'time': time,
 						'location': location,
 						'game_no': game_no,
-						'away_team': away_team,
+						'away_team_url': away_team,
 						'away_score': away_score,
-						'home_team': home_team,
+						'home_team_url': home_team,
 						'home_score': home_score,
 						'away_sp': away_sp,
 						'home_sp': home_sp
@@ -313,12 +368,33 @@ func FetchTomorrowSchedule() ([]GameSchedule, error) {
 		return nil, err
 	}
 
-	var schedulesTomorrow []GameSchedule
+	var schedulesTomorrow []RawGameSchedule
 	if err := json.Unmarshal([]byte(jsonStr), &schedulesTomorrow); err != nil {
 		return nil, err
 	}
 
-	return schedulesTomorrow, nil
+	var final []GameSchedule
+	for _, item := range schedulesTomorrow {
+		final = append(final, GameSchedule{
+			Date:           item.Date,
+			Day:            item.Day,
+			Time:           item.Time,
+			Location:       item.Location,
+			GameNo:         item.GameNo,
+			AwayTeam:       getTeamName(item.AwayTeamURL).FullName,
+			AwayTeamAbbr:   getTeamName(item.AwayTeamURL).AbbrName,
+			AwayTeamSingle: getTeamName(item.AwayTeamURL).OneName,
+			AwayScore:      item.AwayScore,
+			AwaySP:         item.AwaySP,
+			HomeTeam:       getTeamName(item.HomeTeamURL).FullName,
+			HomeTeamAbbr:   getTeamName(item.HomeTeamURL).AbbrName,
+			HomeTeamSingle: getTeamName(item.HomeTeamURL).OneName,
+			HomeScore:      item.HomeScore,
+			HomeSP:         item.HomeSP,
+		})
+	}
+
+	return final, nil
 }
 
 // 定義一個名為 getTomorrowScheduleHandler 的函式，w 是用來寫入 HTTP 回應的物件，r 是用來讀取請求資料的物件
